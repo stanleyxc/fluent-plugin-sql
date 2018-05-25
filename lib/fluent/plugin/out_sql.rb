@@ -36,10 +36,11 @@ module Fluent::Plugin
     # TODO: Merge SQLInput's TableElement
     class TableElement
       include Fluent::Configurable
-
+      #'utc'.intern
       config_param :table, :string
       config_param :column_mapping, :string
       config_param :num_retries, :integer, default: 5
+      config_param :use_timezone, :enum, list: [:utc, :local], default: :utc
 
       attr_reader :model
       attr_reader :pattern
@@ -53,7 +54,6 @@ module Fluent::Plugin
 
       def configure(conf)
         super
-
         @mapping = parse_column_mapping(@column_mapping)
         @format_proc = Proc.new { |record|
           new_record = {}
@@ -67,11 +67,12 @@ module Fluent::Plugin
       def init(base_model)
         # See SQLInput for more details of following code
         table_name = @table
+	table_timezone = @use_timezone
         @model = Class.new(base_model) do
           self.table_name = table_name
+          self.default_timezone = table_timezone
           self.inheritance_column = '_never_use_output_'
         end
-
         class_name = table_name.singularize.camelize
         base_model.const_set(class_name, @model)
         model_name = ActiveModel::Name.new(@model, nil, class_name)
@@ -241,7 +242,7 @@ module Fluent::Plugin
     def init_table(te, base_model)
       begin
         te.init(base_model)
-        log.info "Selecting '#{te.table}' table"
+        log.info "Selecting '#{te.table}' table, will use timezone: ", te.model.default_timezone.to_s()
         false
       rescue => e
         log.warn "Can't handle '#{te.table}' table. Ignoring.", error: e
